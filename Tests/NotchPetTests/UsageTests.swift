@@ -61,7 +61,7 @@ import Testing
         }}
         """#)!
         let u = try #require(UsageParser.claude(payload, now: now))
-        #expect(u.windows.map(\.label) == ["Session (5h)", "Weekly", "Weekly Opus", "Some New Limit"])
+        #expect(u.windows.map(\.label) == ["Session (5h)", "Weekly", "Weekly Opus"])   // unknown windows are skipped
         #expect(u.windows[0].usedPct == 42.5)
         #expect(u.updated == now)
         // Seconds and milliseconds epochs land on the same instant.

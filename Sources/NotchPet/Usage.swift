@@ -37,10 +37,11 @@ enum UsageParser {
     /// Claude Code status line payload: `rate_limits.{five_hour, seven_day, …}.{used_percentage, resets_at}`.
     static func claude(_ payload: [String: Any], now: Date) -> AgentUsage? {
         guard let limits = payload["rate_limits"] as? [String: Any] else { return nil }
+        // Only the windows Claude documents in /usage. The account endpoint also returns
+        // internal codename windows that mean nothing to a user, so those are skipped.
         let order = ["five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet"]
-        let keys = limits.keys.sorted { (order.firstIndex(of: $0) ?? 99, $0) < (order.firstIndex(of: $1) ?? 99, $1) }
         var windows: [LimitWindow] = []
-        for key in keys {
+        for key in order {
             guard let w = limits[key] as? [String: Any],
                   let pct = number(w["used_percentage"] ?? w["utilization"]) else { continue }
             windows.append(LimitWindow(label: claudeLabel(key), usedPct: min(100, max(0, pct)), resetsAt: epoch(w["resets_at"])))
@@ -168,7 +169,7 @@ struct UsageStrip: View {
                 Text(freshness(agent, usage))
                     .font(uiFont(8.5, .regular, theme))
                     .foregroundStyle(isStale(agent, usage) ? Color(red: 1, green: 0.75, blue: 0.3) : .white.opacity(0.35))
-                ForEach(usage.windows.prefix(3)) { w in
+                ForEach(usage.windows.prefix(2)) { w in   // the card fits two bars: session and weekly
                     LimitBar(window: w, theme: theme, now: now)
                 }
             } else if usage != nil {
