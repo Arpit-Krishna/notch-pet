@@ -342,10 +342,13 @@ struct ExpandedView: View {
             Button { store.setHooks(!store.hooksInstalled) } label: {
                 Label("Permission alerts", systemImage: store.hooksInstalled ? "bell.badge.fill" : "bell.slash")
             }
-            .foregroundStyle(store.hooksInstalled ? Color.white.opacity(0.9) : Color.white.opacity(0.6))
-            .help(store.hooksInstalled
-                  ? "On: Pip is told the moment Claude or Codex shows a permission prompt. Click to remove the hook."
-                  : "Off: Pip guesses from quiet tool calls. Click to add a small hook to ~/.claude/settings.json and ~/.codex/hooks.json (a backup is kept).")
+            .foregroundStyle(store.codexHookPending ? Color(red: 1, green: 0.75, blue: 0.3)
+                             : store.hooksInstalled ? Color.white.opacity(0.9) : Color.white.opacity(0.6))
+            .help(!store.hooksInstalled
+                  ? "Off: Pip guesses from quiet tool calls. Click to add a small hook to ~/.claude/settings.json and ~/.codex/hooks.json (a backup is kept)."
+                  : store.codexHookPending
+                  ? "On for Claude. Codex only runs new hooks after you trust them: run /hooks in Codex and approve Notch Pet's. Until Pip sees one Codex prompt, it keeps guessing for Codex. Click to remove the hook."
+                  : "On: Pip is told the moment Claude or Codex shows a permission prompt. Click to remove the hook.")
 
             Button {
                 do {

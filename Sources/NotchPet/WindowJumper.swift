@@ -3,50 +3,108 @@ import SwiftUI
 
 /// Brings the window running a session to the front.
 ///
-/// Finds the agent process whose working directory matches the session, walks up its
-/// parent processes to the app hosting it, then:
+/// Finds the agent process running the session (see `resolve`), walks up its parent
+/// processes to the app hosting it, then:
 /// - Terminal / iTerm2: selects the exact tab by its tty (asks once for Automation permission)
 /// - VS Code, Cursor, Windsurf, Zed: reopens the session's folder, which focuses that window
 /// - anything else (Claude, ChatGPT/Codex, Warp, Ghostty…): activates the app
 enum WindowJumper {
-    private struct Proc { let pid: Int32; let ppid: Int32; let tty: String; let path: String }
+    fileprivate struct Proc { let pid: Int32; let ppid: Int32; let tty: String; let path: String }
 
     private static let folderEditors: Set<String> = [
         "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92",  // Cursor
         "com.exafunction.windsurf", "dev.zed.Zed", "com.vscodium",
     ]
 
-    /// Returns false when no window could be found (the session's process is gone).
-    @discardableResult
-    static func jump(to s: Session) -> Bool {
+    /// Where a click on a session would land.
+    struct Target {
+        fileprivate let agent: Proc?
+        let app: NSRunningApplication?
+        /// The process was tied to this very transcript, not just guessed from its folder.
+        let exact: Bool
+        /// How many agent processes run in the session's folder when we had to guess.
+        let sameFolder: Int
+
+        var ambiguous: Bool { !exact && sameFolder > 1 }
+    }
+
+    /// Finds the process behind a session. Exact links come first:
+    /// - Claude Code writes ~/.claude/sessions/<pid>.json naming the session it runs, and
+    ///   the transcript file is named after that session.
+    /// - Codex keeps its rollout file open, so lsof shows which process writes it.
+    /// Only when neither works does it fall back to matching the working directory.
+    static func resolve(_ s: Session) -> Target? {
         let procs = processTable()
         let byPid = Dictionary(procs.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
-        let names = s.agent == .claude ? ["claude"] : ["codex"]
-        let agents = procs.filter { p in names.contains((p.path as NSString).lastPathComponent.lowercased()) }
-        let cwds = workingDirectories(agents.map(\.pid))
-        // Prefer an agent running in the session's folder; newest process first.
-        let match = agents.sorted { $0.pid > $1.pid }.first { s.cwd != nil && cwds[$0.pid] == s.cwd }
+        let name = s.agent == .claude ? "claude" : "codex"
+        let agents = procs.filter { ($0.path as NSString).lastPathComponent.lowercased() == name }
+        let live = Dictionary(agents.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
 
-        if let agent = match, let app = hostApp(of: agent, byPid) {
-            let bundle = app.bundleIdentifier ?? ""
-            if bundle == "com.apple.Terminal", agent.tty != "??", runScript(terminalScript(tty: "/dev/" + agent.tty)) { return true }
-            if bundle == "com.googlecode.iterm2", agent.tty != "??", runScript(itermScript(tty: "/dev/" + agent.tty)) { return true }
-            if folderEditors.contains(bundle), let cwd = s.cwd, let appURL = app.bundleURL {
-                NSWorkspace.shared.open([URL(fileURLWithPath: cwd)], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration())
-                return true
-            }
-            bringToFront(app)
-            return true
+        let owner = s.agent == .claude ? claudeOwner(of: s.id, live: live) : codexOwner(of: s.id, pids: agents.map(\.pid))
+        if let p = owner.flatMap({ live[$0] }) {
+            return Target(agent: p, app: hostApp(of: p, byPid), exact: true, sameFolder: 1)
         }
 
+        let cwds = workingDirectories(agents.map(\.pid))
+        let inFolder = agents.filter { s.cwd != nil && cwds[$0.pid] == s.cwd }.sorted { $0.pid > $1.pid }
+        if let p = inFolder.first {
+            return Target(agent: p, app: hostApp(of: p, byPid), exact: false, sameFolder: inFolder.count)
+        }
         // No live process: fall back to the desktop app the session came from.
         for bundle in desktopBundles(for: s) {
             if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first {
-                bringToFront(app)
-                return true
+                return Target(agent: nil, app: app, exact: false, sameFolder: 0)
             }
         }
-        return false
+        return nil
+    }
+
+    /// Returns false when no window could be found (the session's process is gone).
+    @discardableResult
+    static func jump(to s: Session) -> Bool {
+        guard let t = resolve(s), let app = t.app else { return false }
+        let bundle = app.bundleIdentifier ?? ""
+        if let agent = t.agent, agent.tty != "??" {
+            if bundle == "com.apple.Terminal", runScript(terminalScript(tty: "/dev/" + agent.tty)) { return true }
+            if bundle == "com.googlecode.iterm2", runScript(itermScript(tty: "/dev/" + agent.tty)) { return true }
+        }
+        if t.agent != nil, folderEditors.contains(bundle), let cwd = s.cwd, let appURL = app.bundleURL {
+            NSWorkspace.shared.open([URL(fileURLWithPath: cwd)], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration())
+            return true
+        }
+        bringToFront(app)
+        return true
+    }
+
+    /// Tooltip for a session row: where a click goes, and whether that is a guess.
+    static func hint(for s: Session) -> String {
+        guard let t = resolve(s), let app = t.app else { return "Its window is gone (the chat has ended)" }
+        let place = app.localizedName ?? "its app"
+        if t.ambiguous {
+            return "Click to go to \(place). \(t.sameFolder) chats run in this folder, so this may open the wrong one."
+        }
+        return "Click to go to this chat in \(place)"
+    }
+
+    private static func claudeOwner(of transcript: String, live: [Int32: Proc]) -> Int32? {
+        let session = ((transcript as NSString).lastPathComponent as NSString).deletingPathExtension
+        let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/sessions")
+        for pid in live.keys {
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent("\(pid).json")),
+                  let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if o["sessionId"] as? String == session && (o["pid"] as? NSNumber)?.int32Value ?? pid == pid { return pid }
+        }
+        return nil
+    }
+
+    private static func codexOwner(of transcript: String, pids: [Int32]) -> Int32? {
+        guard !pids.isEmpty else { return nil }
+        var current: Int32?
+        for line in run("/usr/sbin/lsof", ["-Fpn", "-p", pids.map(String.init).joined(separator: ",")]).split(separator: "\n") {
+            if line.hasPrefix("p") { current = Int32(line.dropFirst()) }
+            else if line.hasPrefix("n"), line.dropFirst() == transcript[...] { return current }
+        }
+        return nil
     }
 
     /// Desktop apps a session may have come from, most likely first.
@@ -156,18 +214,30 @@ enum WindowJumper {
     }
 }
 
-/// Click to jump: a pointing-hand cursor, a tooltip, and a tap that runs `jump`.
+/// Click to jump: a pointing-hand cursor, a tooltip saying where the click goes (and
+/// whether it is a guess), and a tap that jumps.
 struct JumpOnClick: ViewModifier {
-    let enabled: Bool
-    let jump: () -> Void
+    let session: Session?
+    @State private var hint = "Click to go to this chat's window"
 
     func body(content: Content) -> some View {
-        if enabled {
+        if let session {
             content
                 .contentShape(Rectangle())
-                .onTapGesture(perform: jump)
-                .onHover { inside in if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
-                .help("Click to go to this chat's window")
+                .onTapGesture { if !WindowJumper.jump(to: session) { NSSound.beep() } }
+                .onHover { inside in
+                    if inside {
+                        NSCursor.pointingHand.push()
+                        // ps and lsof take a moment, so work out the tooltip off the main thread.
+                        Task.detached(priority: .userInitiated) {
+                            let text = WindowJumper.hint(for: session)
+                            await MainActor.run { hint = text }
+                        }
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .help(hint)
         } else {
             content
         }
@@ -175,9 +245,5 @@ struct JumpOnClick: ViewModifier {
 }
 
 extension View {
-    func jumpOnClick(_ session: Session?) -> some View {
-        modifier(JumpOnClick(enabled: session != nil) {
-            if let s = session, !WindowJumper.jump(to: s) { NSSound.beep() }
-        })
-    }
+    func jumpOnClick(_ session: Session?) -> some View { modifier(JumpOnClick(session: session)) }
 }

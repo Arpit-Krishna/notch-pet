@@ -109,16 +109,18 @@ struct UsageStrip: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             card(.claude, store.claudeUsage) {
-                if store.statusLineInstalled {
+                if store.accountUsage {
+                    Text(store.usageNote ?? "Asking Anthropic for your usage…")
+                } else if store.statusLineInstalled {
                     Text("Shows up after your next message in the Claude Code CLI.")
                 } else {
-                    Button { store.setStatusLine(true) } label: {
+                    Button { store.setAccountUsage(true) } label: {
                         Label("Connect Claude usage", systemImage: "link")
                             .font(uiFont(10, .bold, theme))
                             .foregroundStyle(Agent.claude.tint)
                     }
                     .buttonStyle(.plain)
-                    .help("Adds a status line to ~/.claude/settings.json that copies Claude Code's plan limits for Pip and then shows your current status line (a backup is kept).")
+                    .help("Reads your plan usage from Anthropic using the Claude Code login in your Keychain (macOS asks once). Sent only to api.anthropic.com.")
                 }
             }
             card(.codex, store.codexUsage) {
@@ -137,13 +139,35 @@ struct UsageStrip: View {
                     Text(plan).font(uiFont(9, .regular, theme)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                if agent == .claude && store.statusLineInstalled {
-                    Button { store.setStatusLine(false) } label: { Image(systemName: "link.badge.plus").rotationEffect(.degrees(45)) }
+                if agent == .claude && (store.accountUsage || store.statusLineInstalled) {
+                    Button {
+                        if store.accountUsage { store.setAccountUsage(false) }
+                        if store.statusLineInstalled { store.setStatusLine(false) }
+                    } label: { Image(systemName: "link.badge.plus").rotationEffect(.degrees(45)) }
                         .buttonStyle(.plain).foregroundStyle(.white.opacity(0.3))
-                        .help("Disconnect Claude usage (restores your previous status line)")
+                        .help("Disconnect Claude usage")
+                }
+                if agent == .claude && !store.accountUsage {
+                    // Old status line numbers can fill the card, so the connect button lives in the header too.
+                    Button { store.setAccountUsage(true) } label: {
+                        Label("Connect", systemImage: "link").font(uiFont(9.5, .bold, theme))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(Agent.claude.tint)
+                    .help("Read your plan usage from Anthropic using your Claude Code login (macOS asks once)")
                 }
             }
-            if let usage, !usage.windows.isEmpty {
+            if agent == .claude, let note = store.usageNote {
+                // A failed refresh must not leave old numbers looking current.
+                Text(note).font(uiFont(9.5, .regular, theme)).foregroundStyle(Color(red: 1, green: 0.75, blue: 0.3))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let usage {
+                    Text("Last reading \(relative(usage.updated, now: now)) ago")
+                        .font(uiFont(9, .regular, theme)).foregroundStyle(.white.opacity(0.4))
+                }
+            } else if let usage, !usage.windows.isEmpty {
+                Text(freshness(agent, usage))
+                    .font(uiFont(8.5, .regular, theme))
+                    .foregroundStyle(isStale(agent, usage) ? Color(red: 1, green: 0.75, blue: 0.3) : .white.opacity(0.35))
                 ForEach(usage.windows.prefix(3)) { w in
                     LimitBar(window: w, theme: theme, now: now)
                 }
@@ -158,7 +182,19 @@ struct UsageStrip: View {
         .modifier(CardBackground(theme: theme))
     }
 
-    nonisolated static let height: CGFloat = 76
+    nonisolated static let height: CGFloat = 88
+
+    /// Readings older than this are flagged: Claude account usage refreshes every 2 minutes,
+    /// the status line and Codex logs only when those tools are used.
+    private func isStale(_ agent: Agent, _ u: AgentUsage) -> Bool {
+        let age = now.timeIntervalSince(u.updated)
+        return agent == .claude && store.accountUsage ? age > 10 * 60 : age > 60 * 60
+    }
+
+    private func freshness(_ agent: Agent, _ u: AgentUsage) -> String {
+        let ago = "updated \(relative(u.updated, now: now)) ago"
+        return isStale(agent, u) ? "⚠ \(ago), may be out of date" : ago
+    }
 }
 
 struct CardBackground: ViewModifier {

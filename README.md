@@ -46,13 +46,13 @@ build/NotchPet.app/Contents/MacOS/NotchPet --export-sounds ./sounds    # every p
 
 | Button | What it does |
 |---|---|
-| 🔔 Permission alerts | Pip knows the moment an agent asks for permission (adds a tiny hook, click again to remove) |
-| 🔗 Connect Claude usage | Shows your Claude 5h and weekly limits (adds a status line, keeps your old one) |
+| 🔔 Permission alerts | Pip knows the moment an agent asks for permission (adds a tiny hook, click again to remove). Codex runs it only after you trust it with `/hooks` in Codex; the bell stays amber until then. |
+| 🔗 Connect Claude usage | Shows your Claude 5h and weekly limits, refreshed every 2 minutes. Uses the login saved by the `claude` terminal app (macOS asks once for Keychain access). If that login expires, run `claude` once to renew it. |
 | 🐾 Pet picker | Choose your pet |
 | 🔊 Mute | Sounds on/off |
 | ⭕ Login | Start Pip at login |
 
-Both 🔔 and 🔗 back up your settings first. Codex limits need no setup.
+🔔 backs up your Claude and Codex settings before changing them. 🔗 changes no settings. Codex limits need no setup.
 
 ## Pets and biomes
 
@@ -70,4 +70,6 @@ Want the real mob sounds? Run `./fetch-mc-sounds.sh`. They're Mojang's, so they 
 
 ---
 
-No telemetry, nothing leaves your Mac. Not affiliated with Mojang or Microsoft. 💚
+**Privacy:** watching sessions is fully local, since Pip only reads the logs on your Mac. The one thing that goes online is 🔗 Connect Claude usage: it sends your Claude Code login to Anthropic's API (`api.anthropic.com`) to fetch your usage. Nothing goes anywhere else, Pip never stores the login, and there's no telemetry.
+
+Not affiliated with Mojang or Microsoft. 💚

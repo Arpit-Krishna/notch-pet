@@ -75,7 +75,7 @@ struct Session: Identifiable, Equatable {
         if phase.isBusy && now.timeIntervalSince(max(lastEvent, lastActivity)) > 45 * 60 { return .idle }
         // Without the hook, transcripts can't tell us about permission prompts, so a tool
         // call that has gone quiet for a while is shown as possibly needing the user.
-        if phase == .working && quietHeuristicEnabled {
+        if phase == .working && !hookConfirmed.contains(agent) {
             let longRunning: Set<String> = ["Task", "Agent", "Bash", "shell", "exec_command", "local_shell", "BashOutput", "Monitor"]
             let threshold: TimeInterval = longRunning.contains(tool ?? "") ? 45 : 12
             if tool == "Task" || tool == "Agent" || tool == "Monitor" { return .working }
@@ -85,8 +85,9 @@ struct Session: Identifiable, Equatable {
     }
 }
 
-/// Off once the permission hook is installed: then "needs you" comes from real events only.
-nonisolated(unsafe) var quietHeuristicEnabled = true
+/// Agents whose permission hook is known to work. For these, "needs you" comes from real
+/// events only; every other agent keeps the quiet-tool-call guess.
+nonisolated(unsafe) var hookConfirmed: Set<Agent> = []
 
 enum Mood: Hashable {
     case sleeping, awake, busy, alert, happy, sad

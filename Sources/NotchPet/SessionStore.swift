@@ -23,6 +23,9 @@ final class SessionStore: ObservableObject {
     private var claudeWindow: [String: Int] = [:]
     @Published private(set) var lastHappy: Date = .distantPast
     @Published private(set) var hooksInstalled = HookInstaller.isInstalled
+    /// Codex runs a new hook only after you trust it in `/hooks`; the first Codex event proves it.
+    @Published private(set) var codexHookPending = false
+    private var codexHookSeen = UserDefaults.standard.bool(forKey: "codexHookSeen")
     @Published private(set) var hookError: String?
 
     private var events = Tail(url: HookInstaller.eventsURL)
@@ -40,7 +43,7 @@ final class SessionStore: ObservableObject {
     private let dropAfter: TimeInterval = 20 * 60
 
     func start() {
-        quietHeuristicEnabled = !hooksInstalled
+        updateHookState()
         SoundFX.enabled = soundOn
         // Start from the end of the event log: older prompts were answered long ago.
         let size = (try? fm.attributesOfItem(atPath: HookInstaller.eventsURL.path))?[.size] as? UInt64
@@ -74,6 +77,7 @@ final class SessionStore: ObservableObject {
         let now = Date()
         if ticks % 3 == 0 { discover(now) }
         if ticks % 300 == 299 { scanCodexUsage() }
+        if ticks % 120 == 2 { refreshAccountUsage() }
         ticks += 1
 
         for (path, tail) in tails {
@@ -183,11 +187,43 @@ final class SessionStore: ObservableObject {
         } catch {
             hookError = error.localizedDescription
         }
-        hooksInstalled = HookInstaller.isInstalled
-        quietHeuristicEnabled = !hooksInstalled
+        updateHookState()
+    }
+
+    /// Claude usage read from Anthropic with the Claude Code login (see AccountUsage).
+    @Published private(set) var accountUsage: Bool = UserDefaults.standard.bool(forKey: "accountUsage")
+    @Published private(set) var usageNote: String?
+    private var fetchingUsage = false
+
+    func setAccountUsage(_ on: Bool) {
+        accountUsage = on
+        UserDefaults.standard.set(on, forKey: "accountUsage")
+        usageNote = nil
+        if on { refreshAccountUsage() } else { claudeUsage = nil }   // don't leave old numbers looking current
+    }
+
+    private func refreshAccountUsage() {
+        guard accountUsage, !fetchingUsage else { return }
+        fetchingUsage = true
+        Task { @MainActor in
+            defer { fetchingUsage = false }
+            do {
+                claudeUsage = try await AccountUsage.fetch()
+                usageNote = nil
+            } catch AccountUsage.Failure.noLogin {
+                usageNote = "No Claude Code login found in Keychain (or access was denied)."
+            } catch AccountUsage.Failure.expired {
+                usageNote = "Claude Code login expired. Use Claude Code once and it refreshes."
+            } catch AccountUsage.Failure.http(let code) {
+                usageNote = "Anthropic answered \(code). Retrying in 2 minutes."
+            } catch {
+                usageNote = "Couldn't read usage. Retrying in 2 minutes."
+            }
+        }
     }
 
     func setStatusLine(_ on: Bool) {
+        if !on && !accountUsage { claudeUsage = nil }
         do {
             if on { try HookInstaller.installStatusLine() } else { try HookInstaller.uninstallStatusLine() }
             hookError = nil
@@ -199,9 +235,13 @@ final class SessionStore: ObservableObject {
 
     /// Latest Claude Code status line payloads: plan limits plus per-session cost.
     private func readStatusLine(_ now: Date) {
-        for line in statusTail.readNew(backfill: 256 * 1024) {
+        let lines = statusTail.readNew(backfill: 256 * 1024)
+        guard !lines.isEmpty else { return }
+        // Payloads carry no timestamp; the file's write time is when Claude Code last reported.
+        let written = (try? fm.attributesOfItem(atPath: HookInstaller.statusURL.path))?[.modificationDate] as? Date ?? now
+        for line in lines {
             guard let o = jsonObject(line) else { continue }
-            if let u = UsageParser.claude(o, now: now) { claudeUsage = u }
+            if let u = UsageParser.claude(o, now: written), u.updated >= (claudeUsage?.updated ?? .distantPast) { claudeUsage = u }
             if let sid = o["session_id"] as? String, let cost = (o["cost"] as? [String: Any])?["total_cost_usd"] as? Double {
                 claudeCost[sid] = cost
             }
@@ -256,9 +296,25 @@ final class SessionStore: ObservableObject {
     }
 
     /// Applies permission prompts reported by the hook to the matching session.
+    private func updateHookState() {
+        hooksInstalled = HookInstaller.isInstalled
+        let codexInstalled = HookInstaller.isInstalled(.codex)
+        if !codexInstalled { codexHookSeen = false; UserDefaults.standard.set(false, forKey: "codexHookSeen") }
+        var confirmed: Set<Agent> = []
+        if HookInstaller.isInstalled(.claude) { confirmed.insert(.claude) }
+        if codexInstalled && codexHookSeen { confirmed.insert(.codex) }
+        hookConfirmed = confirmed
+        codexHookPending = codexInstalled && !codexHookSeen
+    }
+
     private func readHookEvents() {
         for line in events.readNew(backfill: 0) {
             guard let o = jsonObject(line), let e = o["event"] as? [String: Any] else { continue }
+            if o["agent"] as? String == "codex" && !codexHookSeen {
+                codexHookSeen = true
+                UserDefaults.standard.set(true, forKey: "codexHookSeen")
+                updateHookState()
+            }
             let name = e["hook_event_name"] as? String ?? ""
             guard name == "PermissionRequest" || name == "Notification" else { continue }
             let at = Date(timeIntervalSince1970: o["at"] as? Double ?? Date().timeIntervalSince1970)

@@ -26,8 +26,14 @@ enum HookInstaller {
         return t
     }
 
-    static var isInstalled: Bool {
-        guard let data = try? Data(contentsOf: targets[0].url) else { return false }
+    /// True when any agent's settings route permission prompts to Pip.
+    static var isInstalled: Bool { isInstalled(.claude) || isInstalled(.codex) }
+
+    /// Whether this agent's own settings file contains Pip's hook. Claude runs it right away;
+    /// Codex only after you trust it in `/hooks`, which Pip learns from the first Codex event.
+    static func isInstalled(_ agent: Agent) -> Bool {
+        guard let t = targets.first(where: { $0.agent == agent.rawValue }),
+              let data = try? Data(contentsOf: t.url) else { return false }
         return String(decoding: data, as: UTF8.self).contains(marker)
     }
 
