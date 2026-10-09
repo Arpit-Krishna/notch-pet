@@ -443,7 +443,9 @@ struct SessionRow: View {
         case .idle: return session.lastPrompt.isEmpty ? session.activity : "Last: \(session.lastPrompt)"
         default:
             let steps = session.toolCount > 0 ? " · \(session.toolCount) steps" : ""
-            return session.activity + steps
+            let quiet = now.timeIntervalSince(max(session.lastEvent, session.lastActivity))
+            let hush = phase.isBusy && quiet > 120 ? " · quiet \(relative(now.addingTimeInterval(-quiet), now: now))" : ""
+            return session.activity + steps + hush
         }
     }
 

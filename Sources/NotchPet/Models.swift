@@ -54,6 +54,8 @@ struct Session: Identifiable, Equatable {
     var lastPrompt: String = ""
     var turnStart: Date?
     var lastEvent: Date = .distantPast
+    /// Timestamp of the newest line of any kind (token counts, reasoning…): proof the session is alive.
+    var lastActivity: Date = .distantPast
     var toolCount: Int = 0
     /// Set by the optional permission hook; cleared by the next sign of progress in the transcript.
     var permission: String?
@@ -68,7 +70,9 @@ struct Session: Identifiable, Equatable {
     func displayPhase(at now: Date) -> Phase {
         if permission != nil { return .waiting }
         let quiet = now.timeIntervalSince(lastEvent)
-        if phase.isBusy && quiet > 600 { return .idle }
+        // Long builds, slow reasoning and app-side approvals can leave a transcript silent for a
+        // long time, so a busy session only counts as abandoned after 45 minutes with no writes at all.
+        if phase.isBusy && now.timeIntervalSince(max(lastEvent, lastActivity)) > 45 * 60 { return .idle }
         // Without the hook, transcripts can't tell us about permission prompts, so a tool
         // call that has gone quiet for a while is shown as possibly needing the user.
         if phase == .working && quietHeuristicEnabled {

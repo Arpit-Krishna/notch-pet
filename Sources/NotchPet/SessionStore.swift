@@ -66,7 +66,7 @@ final class SessionStore: ObservableObject {
         if phases.contains(where: { $0.isBusy }) { return .busy }
         if now.timeIntervalSince(lastHappy) < 6 { return .happy }
         if sessions.contains(where: { $0.phase == .error && now.timeIntervalSince($0.lastEvent) < 120 }) { return .sad }
-        if sessions.contains(where: { now.timeIntervalSince($0.lastEvent) < 5 * 60 }) { return .awake }
+        if sessions.contains(where: { now.timeIntervalSince(max($0.lastEvent, $0.lastActivity)) < 5 * 60 }) { return .awake }
         return .sleeping
     }
 
@@ -83,6 +83,7 @@ final class SessionStore: ObservableObject {
             let before = s.displayPhase(at: now)
             for line in lines {
                 guard let o = jsonObject(line) else { continue }
+                if let ts = parseDate(o["timestamp"]), ts > s.lastActivity { s.lastActivity = ts }
                 switch s.agent {
                 case .claude: ClaudeParser.apply(o, to: &s)
                 case .codex: CodexParser.apply(o, to: &s)
@@ -128,7 +129,7 @@ final class SessionStore: ObservableObject {
         }
         if effects.contains(where: { $0.until < now }) { effects.removeAll { $0.until < now } }
 
-        for (id, s) in state where now.timeIntervalSince(s.lastEvent) > dropAfter {
+        for (id, s) in state where now.timeIntervalSince(max(s.lastEvent, s.lastActivity)) > dropAfter && !s.phase.isBusy || now.timeIntervalSince(max(s.lastEvent, s.lastActivity)) > 60 * 60 {
             state[id] = nil
             tails[id] = nil
         }
