@@ -46,6 +46,8 @@ struct Session: Identifiable, Equatable {
     var project: String = "…"
     var cwd: String?
     var branch: String?
+    /// Where the agent runs: Claude's "entrypoint" (cli, claude-desktop…) or Codex's "originator".
+    var client: String?
     var phase: Phase = .idle
     var activity: String = ""
     var tool: String?
@@ -94,6 +96,8 @@ struct Toast: Identifiable, Equatable {
     let detail: String
     /// Overrides the block theme's popup header ("Advancement made!", "Needs you!"…).
     var header: String? = nil
+    /// The session to jump to when the popup is clicked.
+    var sessionID: String? = nil
 }
 
 func shortText(_ s: String, _ n: Int) -> String {

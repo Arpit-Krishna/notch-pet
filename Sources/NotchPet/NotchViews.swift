@@ -130,7 +130,9 @@ struct RootView: View {
                 VStack(spacing: 0) {
                     topBar
                     if ui.mode == .toast, let t = store.toast {
-                        ToastView(toast: t, theme: theme).transition(.opacity)
+                        ToastView(toast: t, theme: theme)
+                            .jumpOnClick(store.sessions.first { $0.id == t.sessionID })
+                            .transition(.opacity)
                     } else if ui.mode == .expanded {
                         ExpandedView(store: store, ui: ui).transition(.opacity)
                     }
@@ -420,7 +422,9 @@ struct SessionRow: View {
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(phase == .waiting ? phase.color.opacity(0.5) : .clear, lineWidth: 1))
             }
         }
+        .jumpOnClick(session)
         .contextMenu {
+            Button("Go to window") { if !WindowJumper.jump(to: session) { NSSound.beep() } }
             if let cwd = session.cwd {
                 Button("Open folder in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: cwd)) }
                 Button("Copy folder path") {

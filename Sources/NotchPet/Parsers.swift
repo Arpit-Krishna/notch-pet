@@ -87,6 +87,7 @@ enum ClaudeParser {
             s.project = (cwd as NSString).lastPathComponent
         }
         if let b = o["gitBranch"] as? String, !b.isEmpty, b != "HEAD" { s.branch = b }
+        if let e = o["entrypoint"] as? String, !e.isEmpty { s.client = e }
         let sidechain = o["isSidechain"] as? Bool ?? false
         let msg = o["message"] as? [String: Any]
 
@@ -176,6 +177,7 @@ enum CodexParser {
             s.project = (cwd as NSString).lastPathComponent
         }
         if let git = p["git"] as? [String: Any], let b = git["branch"] as? String, !b.isEmpty { s.branch = b }
+        if let origin = p["originator"] as? String, !origin.isEmpty { s.client = origin }
 
         switch o["type"] as? String {
         case "event_msg":

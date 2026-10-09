@@ -31,7 +31,8 @@ Hover over the notch to open the panel:
 
 - **Usage cards** show your Claude and Codex plan limits: session (5h) and weekly, with a bar that fills like an XP bar and time until reset.
 - **One row per session** shows project, git branch, what it's doing right now ("Editing client.ts", "Running npm test"), steps taken, context used, cost and turn timer.
-- Right-click a row to open its folder or reveal its transcript.
+- **Too many windows? Click a session (or its popup) and Pip takes you there.** It finds the agent's process and brings its window forward: the exact Terminal or iTerm tab, the VS Code / Cursor / Zed window for that folder, or the Claude / ChatGPT desktop app. The first time, macOS asks whether Pip may control Terminal or iTerm; say OK.
+- Right-click a row to open its folder, reveal its transcript, or jump to its window.
 
 ## Pick your pet 🐾
 
@@ -70,7 +71,7 @@ Want the real mob sounds instead? Run `./fetch-mc-sounds.sh` (see below).
 You need macOS 14 or later and Xcode's command line tools (`xcode-select --install`). There are no other dependencies and no Xcode project.
 
 ```sh
-git clone git@github.com:Arpit-Krishna-CI24/notch-pet.git
+git clone https://github.com/Arpit-Krishna/notch-pet.git
 cd notch-pet
 ./build.sh --run
 ```
@@ -87,6 +88,7 @@ The footer has a few buttons:
 
 | Button | What it does |
 |---|---|
+| 🖱️ **Click a session or popup** | Jumps to the window running that agent. |
 | 🔊 **Mute** | Turns all sounds on or off. |
 | 🔔 **Permission alerts** | Off by default. Turn it on and Pip knows *exactly* when Claude or Codex shows a permission prompt, instead of guessing from a tool call that has gone quiet. It adds a tiny hook to `~/.claude/settings.json` and `~/.codex/hooks.json` (with a dated backup of each). The hook only writes down "a prompt is showing" and exits, so your agents behave exactly the same. Click again to remove it. Codex asks you to trust the hook once. |
 | ⭕ **Login** | Opens Pip when you log in. |
@@ -141,6 +143,7 @@ Sources/NotchPet/
   Parsers.swift          Claude Code and Codex transcript parsing
   Usage.swift            plan limits: parsing + usage cards
   Hooks.swift            optional permission hook and status line installers
+  WindowJumper.swift     click a session to jump to its terminal / editor window
   PixelPets.swift        pet sprites and the picker
   BlockPetView.swift     the grass block (and its TNT mode)
   PetView.swift          Classic Pip

@@ -114,7 +114,7 @@ final class SessionStore: ObservableObject {
                 if !waitNotified.contains(id) {
                     waitNotified.insert(id)
                     let title = s.permission != nil ? "\(s.agent.label) needs your OK" : "\(s.agent.label) may need you"
-                    show(Toast(agent: s.agent, phase: .waiting, title: title, detail: "\(s.project) · \(s.permission ?? s.activity)"), sound: .waiting)
+                    show(Toast(agent: s.agent, phase: .waiting, title: title, detail: "\(s.project) · \(s.permission ?? s.activity)", sessionID: s.id), sound: .waiting)
                 }
             } else {
                 waitNotified.remove(id)
@@ -145,10 +145,10 @@ final class SessionStore: ObservableObject {
         case .done where from.isBusy || from == .waiting:
             lastHappy = Date()
             let took = s.turnStart.map { " in " + clock(Date().timeIntervalSince($0)) } ?? ""
-            show(Toast(agent: s.agent, phase: .done, title: "\(s.agent.label) finished\(took)", detail: "\(s.project) · \(s.activity)"), sound: .done)
+            show(Toast(agent: s.agent, phase: .done, title: "\(s.agent.label) finished\(took)", detail: "\(s.project) · \(s.activity)", sessionID: s.id), sound: .done)
             addEffect(.luck, seconds: 8)
         case .error:
-            show(Toast(agent: s.agent, phase: .error, title: "\(s.agent.label) hit an error", detail: "\(s.project) · \(s.activity)"), sound: .error)
+            show(Toast(agent: s.agent, phase: .error, title: "\(s.agent.label) hit an error", detail: "\(s.project) · \(s.activity)", sessionID: s.id), sound: .error)
             addEffect(.harming, seconds: 8)
         case .thinking, .working:
             if from == .idle || from == .done { addEffect(.speed, seconds: 2.5) }
