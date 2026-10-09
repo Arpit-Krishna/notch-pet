@@ -78,7 +78,7 @@ struct Session: Identifiable, Equatable {
         if phase == .working && quietHeuristicEnabled {
             let longRunning: Set<String> = ["Task", "Agent", "Bash", "shell", "exec_command", "local_shell", "BashOutput", "Monitor"]
             let threshold: TimeInterval = longRunning.contains(tool ?? "") ? 45 : 12
-            if tool == "Task" || tool == "Agent" || tool == "Monitor" { return .working }
+            if tool == "Task" || tool == "Agent" || tool == "Monitor" || tool == "Chat" { return .working }
             if quiet > threshold { return .waiting }
         }
         return phase

@@ -21,6 +21,15 @@ final class SessionStore: ObservableObject {
     private var limitAlerts: Set<String> = []
     private var claudeCost: [String: Double] = [:]
     private var claudeWindow: [String: Int] = [:]
+    /// Optional: follow regular Claude desktop chats through Accessibility (see ChatWatcher).
+    @Published var watchChats: Bool = UserDefaults.standard.bool(forKey: "watchChats") {
+        didSet {
+            UserDefaults.standard.set(watchChats, forKey: "watchChats")
+            if watchChats && !ChatWatcher.isTrusted { ChatWatcher.requestTrust() }
+        }
+    }
+    @Published private(set) var chatsTrusted = ChatWatcher.isTrusted
+    private var chatPolling = false
     @Published private(set) var lastHappy: Date = .distantPast
     @Published private(set) var hooksInstalled = HookInstaller.isInstalled
     @Published private(set) var hookError: String?
@@ -95,6 +104,7 @@ final class SessionStore: ObservableObject {
         }
 
         readHookEvents()
+        if watchChats && ticks % 2 == 0 { pollChats() }
         readStatusLine(now)
         for s in state.values {
             if let u = s.codexLimits, u.updated > (codexUsage?.updated ?? .distantPast) { codexUsage = u }
@@ -251,6 +261,49 @@ final class SessionStore: ObservableObject {
                            title: "\(agent.label) \(w.label.lowercased()) limit at \(Int(pct))%",
                            detail: untilText(w.resetsAt, now: now), header: level >= 90 ? "Almost out!" : "Running low!"), sound: level >= 90 ? .error : .waiting)
                 addEffect(level >= 90 ? .harming : .glowing, seconds: 6)
+            }
+        }
+    }
+
+    /// Mirrors the chat open in each Claude window as a session row.
+    private func pollChats() {
+        guard !chatPolling else { return }
+        chatPolling = true
+        DispatchQueue.global(qos: .utility).async {
+            let chats = ChatWatcher.poll()
+            let trusted = ChatWatcher.isTrusted
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.chatPolling = false
+                self.chatsTrusted = trusted
+                let now = Date()
+                for c in chats {
+                    let key = "claude-chat:" + c.id
+                    var s = self.state[key] ?? Session(id: key, agent: .claude)
+                    let before = s.displayPhase(at: now)
+                    s.project = c.title
+                    s.client = "claude-desktop-chat"
+                    if c.generating {
+                        if !s.phase.isBusy { s.turnStart = now }
+                        s.phase = .working
+                        s.tool = "Chat"
+                        s.activity = "Answering in the Claude app"
+                        s.permission = c.needsApproval ? "Approve a tool in the Claude app" : nil
+                        s.lastEvent = now
+                    } else if s.phase.isBusy || s.permission != nil {
+                        s.phase = .done
+                        s.tool = nil
+                        s.permission = nil
+                        s.activity = "Answered"
+                        s.lastEvent = now
+                    } else if self.state[key] == nil {
+                        continue   // an idle chat that was never seen answering: nothing to show
+                    }
+                    s.lastActivity = now
+                    self.state[key] = s
+                    let after = s.displayPhase(at: now)
+                    if before != after { self.transition(s, from: before, to: after) }
+                }
             }
         }
     }

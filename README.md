@@ -48,6 +48,7 @@ build/NotchPet.app/Contents/MacOS/NotchPet --export-sounds ./sounds    # every p
 |---|---|
 | 🔔 Permission alerts | Pip knows the moment an agent asks for permission (adds a tiny hook, click again to remove) |
 | 🔗 Connect Claude usage | Shows your Claude 5h and weekly limits (adds a status line, keeps your old one) |
+| 💬 Watch chats | Also follows regular Claude app chats, not just Claude Code (reads the Claude window through Accessibility, macOS asks once) |
 | 🐾 Pet picker | Choose your pet |
 | 🔊 Mute | Sounds on/off |
 | ⭕ Login | Start Pip at login |

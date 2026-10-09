@@ -347,6 +347,14 @@ struct ExpandedView: View {
                   ? "On: Pip is told the moment Claude or Codex shows a permission prompt. Click to remove the hook."
                   : "Off: Pip guesses from quiet tool calls. Click to add a small hook to ~/.claude/settings.json and ~/.codex/hooks.json (a backup is kept).")
 
+            Button { store.watchChats.toggle() } label: {
+                Image(systemName: store.watchChats ? (store.chatsTrusted ? "bubble.left.and.text.bubble.right.fill" : "exclamationmark.bubble.fill") : "bubble.left.and.bubble.right")
+            }
+            .foregroundStyle(store.watchChats ? Color.white.opacity(0.9) : Color.white.opacity(0.6))
+            .help(store.watchChats
+                  ? (store.chatsTrusted ? "Watching Claude app chats. Click to stop." : "Allow Notch Pet in System Settings → Privacy & Security → Accessibility to watch Claude app chats.")
+                  : "Watch regular Claude app chats too (reads the Claude window through Accessibility; macOS asks once).")
+
             Button {
                 do {
                     if launchAtLogin { try SMAppService.mainApp.unregister() } else { try SMAppService.mainApp.register() }
