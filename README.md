@@ -18,6 +18,12 @@ cd notch-pet
 
 Look at your notch. Hi Pip 👋 To keep it, drag `build/NotchPet.app` into `/Applications` and turn on **Login** in the panel.
 
+Run the tests (52 checks on the log parsers, file tailing and usage resets):
+
+```sh
+./test.sh
+```
+
 Fun extras:
 
 ```sh

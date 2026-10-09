@@ -6,6 +6,8 @@ final class Tail {
     private(set) var offset: UInt64 = 0
     private var partial = Data()
     private(set) var hasRead = false
+    private var fileID: Int?
+    private var head = Data()
 
     init(url: URL) { self.url = url }
 
@@ -13,7 +15,16 @@ final class Tail {
         guard let h = try? FileHandle(forReadingFrom: url) else { return [] }
         defer { try? h.close() }
         let size = (try? h.seekToEnd()) ?? 0
-        if size < offset { offset = 0; partial.removeAll() }
+        // A different file now sits at this path (new inode, or the same inode rewritten with
+        // different opening bytes): start over from its beginning, even if it is bigger.
+        let id = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.systemFileNumber] as? Int
+        try? h.seek(toOffset: 0)
+        let newHead = (try? h.read(upToCount: 64)) ?? Data()
+        let n = min(head.count, newHead.count)
+        let swapped = hasRead && (id != fileID || head.prefix(n) != newHead.prefix(n))
+        if swapped || size < offset { offset = 0; partial.removeAll() }
+        fileID = id
+        if newHead.count >= head.count || swapped { head = newHead }
         var skipFirst = false
         if !hasRead && size > backfill { offset = size - backfill; skipFirst = true }
         hasRead = true

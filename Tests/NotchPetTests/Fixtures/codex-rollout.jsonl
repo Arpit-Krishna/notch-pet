@@ -1,0 +1,12 @@
+{"timestamp":"2026-10-09T11:00:00.000Z","type":"session_meta","payload":{"id":"abc","cwd":"/Users/me/code/pip","originator":"codex_cli_rs","git":{"branch":"feature/x","commit_hash":"deadbeef"}}}
+{"timestamp":"2026-10-09T11:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>ignored</environment_context>"}]}}
+{"timestamp":"2026-10-09T11:00:02.000Z","type":"event_msg","payload":{"type":"task_started","model_context_window":272000}}
+{"timestamp":"2026-10-09T11:00:02.100Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Fix the flaky test"}]}}
+{"timestamp":"2026-10-09T11:00:03.000Z","type":"response_item","payload":{"type":"reasoning","summary":[]}}
+{"timestamp":"2026-10-09T11:00:04.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"command\":[\"bash\",\"-lc\",\"swift test\"]}","call_id":"c1"}}
+{"timestamp":"2026-10-09T11:00:08.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"ok"}}
+{"timestamp":"2026-10-09T11:00:09.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch\n*** Update File: Sources/Pip/Store.swift\n@@\n-a\n+b\n*** End Patch","call_id":"c2"}}
+{"timestamp":"2026-10-09T11:00:10.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"c2","output":"done"}}
+{"timestamp":"2026-10-09T11:00:11.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":42000},"model_context_window":272000},"rate_limits":{"primary":{"used_percent":37.5,"window_minutes":300,"resets_in_seconds":3600},"secondary":{"used_percent":12,"window_minutes":10080,"resets_at":1791000000},"plan_type":"plus"}}}
+{"timestamp":"2026-10-09T11:00:12.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Fixed it."}]}}
+{"timestamp":"2026-10-09T11:00:13.000Z","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"Fixed the flaky test by waiting for the file."}}
