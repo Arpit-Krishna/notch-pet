@@ -1,0 +1,7 @@
+.build/
+build/
+/sounds/
+*.mp3
+.DS_Store
+*.ogg
+.vscode/
