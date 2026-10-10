@@ -209,17 +209,26 @@ final class SessionStore: ObservableObject {
         accountUsage = on
         UserDefaults.standard.set(on, forKey: "accountUsage")
         usageNote = nil
-        if on { refreshAccountUsage() } else { claudeUsage = nil }   // don't leave old numbers looking current
+        if on { refreshAccountUsage(interactive: true) } else { claudeUsage = nil }   // don't leave old numbers looking current
     }
 
-    private func refreshAccountUsage() {
+    /// True when Keychain access has to be granted again (after a rebuild of Pip, or when Claude
+    /// Code rewrote its login). The card then offers a click to allow, instead of a surprise dialog.
+    @Published private(set) var usageNeedsAccess = false
+
+    /// Background refreshes never open the Keychain dialog; only a click (`interactive`) does.
+    func refreshAccountUsage(interactive: Bool = false) {
         guard accountUsage, !fetchingUsage else { return }
         fetchingUsage = true
         Task { @MainActor in
             defer { fetchingUsage = false }
             do {
-                claudeUsage = try await AccountUsage.fetch()
+                claudeUsage = try await AccountUsage.fetch(interactive: interactive)
                 usageNote = nil
+                usageNeedsAccess = false
+            } catch AccountUsage.Failure.needsAccess {
+                usageNeedsAccess = true
+                usageNote = "macOS needs you to allow Keychain access again. Click Allow below."
             } catch AccountUsage.Failure.noLogin {
                 usageNote = "No Claude Code login found in Keychain (or access was denied)."
             } catch AccountUsage.Failure.expired {

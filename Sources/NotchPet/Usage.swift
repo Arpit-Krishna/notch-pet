@@ -161,7 +161,13 @@ struct UsageStrip: View {
                 // A failed refresh must not leave old numbers looking current.
                 Text(note).font(uiFont(9.5, .regular, theme)).foregroundStyle(Color(red: 1, green: 0.75, blue: 0.3))
                     .fixedSize(horizontal: false, vertical: true)
-                if let usage {
+                if store.usageNeedsAccess {
+                    Button { store.refreshAccountUsage(interactive: true) } label: {
+                        Label("Allow", systemImage: "key.fill").font(uiFont(9.5, .bold, theme))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(Agent.claude.tint)
+                    .help("Opens the macOS Keychain prompt. Choose Always Allow.")
+                } else if let usage {
                     Text("Last reading \(relative(usage.updated, now: now)) ago")
                         .font(uiFont(9, .regular, theme)).foregroundStyle(.white.opacity(0.4))
                 }
