@@ -6,11 +6,15 @@ Pip sits next to the notch. It mines while your agents work, panics when one nee
 
 ![Pip waiting for you](docs/toast-needs-you.png)
 
+**[⬇️ Download Notch Pet 0.2.0 for macOS (.dmg)](https://github.com/Arpit-Krishna/notch-pet/releases/download/v0.2.0/NotchPet-0.2.0.dmg)**
+
 ## Install
 
 **Easiest:** download the latest release, open the `.dmg` and drag Notch Pet into Applications.
 
-[⬇️ Download Notch Pet v0.2.0](https://github.com/Arpit-Krishna/notch-pet/releases/latest)
+### [⬇️ Download Notch Pet 0.2.0 (.dmg)](https://github.com/Arpit-Krishna/notch-pet/releases/download/v0.2.0/NotchPet-0.2.0.dmg)
+
+[.zip instead](https://github.com/Arpit-Krishna/notch-pet/releases/download/v0.2.0/NotchPet-0.2.0.zip) · [all releases](https://github.com/Arpit-Krishna/notch-pet/releases)
 
 The first time, right-click Notch Pet → **Open** (it isn't signed with an Apple developer certificate yet). Look at your notch. Hi Pip 👋 Turn on **Login** in the panel to keep Pip around.
 
