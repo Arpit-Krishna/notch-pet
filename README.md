@@ -8,7 +8,13 @@ Pip sits next to the notch. It mines while your agents work, panics when one nee
 
 ## Install
 
-Needs macOS 14+ and Xcode command line tools (`xcode-select --install`).
+**Easiest:** download the latest release, open the `.dmg` and drag Notch Pet into Applications.
+
+[⬇️ Download Notch Pet v0.2.0](https://github.com/Arpit-Krishna/notch-pet/releases/latest)
+
+The first time, right-click Notch Pet → **Open** (it isn't signed with an Apple developer certificate yet). Look at your notch. Hi Pip 👋 Turn on **Login** in the panel to keep Pip around.
+
+**Or build it yourself** (macOS 14+ and Xcode command line tools: `xcode-select --install`):
 
 ```sh
 git clone https://github.com/Arpit-Krishna/notch-pet.git
@@ -16,22 +22,17 @@ cd notch-pet
 ./build.sh --run
 ```
 
-Look at your notch. Hi Pip 👋 To keep it, drag `build/NotchPet.app` into `/Applications` and turn on **Login** in the panel.
-
 Run the tests (log parsers, file tailing, usage resets, hooks and alert settings):
 
 ```sh
 ./test.sh
 ```
 
-Make a downloadable build (version from `VERSION`, currently 0.2.0):
+Ship a new version: bump `VERSION`, then
 
 ```sh
-./release.sh            # dist/NotchPet-<version>.zip and .dmg
-./release.sh --publish  # also creates the GitHub release and uploads both
+./release.sh --publish  # builds the .dmg and .zip and publishes a GitHub release
 ```
-
-The builds are signed ad hoc, so colleagues right-click → Open the first time. Set `SIGN_IDENTITY` and `NOTARY_PROFILE` (see the top of `release.sh`) for a signed, notarized build.
 
 Fun extras:
 
@@ -67,6 +68,8 @@ build/NotchPet.app/Contents/MacOS/NotchPet --export-sounds ./sounds    # every p
 | 🐾 Pet picker | Choose your pet |
 | 🔊 Mute | Sounds on/off |
 | ⭕ Login | Start Pip at login |
+
+After an update, macOS may ask again for Keychain access: the Claude card shows an **Allow** button, so pick **Always Allow**.
 
 🔔 backs up your Claude and Codex settings before changing them. 🔗 changes no settings. Codex limits need no setup.
 
