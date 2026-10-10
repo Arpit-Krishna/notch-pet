@@ -16,6 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+if CommandLine.arguments.contains("--version") {
+    print("Notch Pet \(AppInfo.versionText)")
+    exit(0)
+}
+
 // `NotchPet --export-sounds <dir>` writes every pet's alert sounds as WAV files, for previewing.
 if let i = CommandLine.arguments.firstIndex(of: "--export-sounds"), i + 1 < CommandLine.arguments.count {
     let dir = URL(fileURLWithPath: CommandLine.arguments[i + 1])
@@ -42,6 +47,18 @@ MainActor.assumeIsolated {
         .background(Color.black)
         let r = ImageRenderer(content: grid)
         r.scale = 2
+        if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+        }
+        exit(0)
+    }
+    // `NotchPet --export-icon <file.png>` renders the 1024 px app icon (see make-icon.sh).
+    if let i = CommandLine.arguments.firstIndex(of: "--export-icon"), i + 1 < CommandLine.arguments.count {
+        // The awake pet hops one pixel for a quarter of every 2.7 s; render while it stands still.
+        while Int(Date().timeIntervalSinceReferenceDate * 1.5) % 4 == 0 { usleep(50_000) }
+        let r = ImageRenderer(content: AppIconView())
+        r.scale = 4
         if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
            let png = rep.representation(using: .png, properties: [:]) {
             try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))

@@ -9,6 +9,8 @@ final class SessionStore: ObservableObject {
     @Published var soundOn: Bool = UserDefaults.standard.object(forKey: "soundOn") as? Bool ?? true {
         didSet { UserDefaults.standard.set(soundOn, forKey: "soundOn"); SoundFX.enabled = soundOn }
     }
+    /// Which alerts pop up or make a sound, per agent, plus quiet hours.
+    @Published var alerts = AlertSettings.load() { didSet { alerts.save() } }
     /// Lingering potion particles, one per recent alert.
     @Published private(set) var effects: [PotionEffect] = []
     /// The chosen pet, whose voice plays on alerts.
@@ -56,6 +58,7 @@ final class SessionStore: ObservableObject {
             try? Data().write(to: HookInstaller.statusURL)
         }
         scanCodexUsage()
+        startWatching()
         tick()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -75,7 +78,8 @@ final class SessionStore: ObservableObject {
 
     private func tick() {
         let now = Date()
-        if ticks % 3 == 0 { discover(now) }
+        // New transcripts are announced by FSEvents; a full scan is only a slow safety net.
+        if ticks % 60 == 0 { discover(now) } else if !changedPaths.isEmpty { discoverChanged(now) }
         if ticks % 300 == 299 { scanCodexUsage() }
         if ticks % 120 == 2 { refreshAccountUsage() }
         ticks += 1
@@ -119,7 +123,7 @@ final class SessionStore: ObservableObject {
                 if !waitNotified.contains(id) {
                     waitNotified.insert(id)
                     let title = s.permission != nil ? "\(s.agent.label) needs your OK" : "\(s.agent.label) may need you"
-                    show(Toast(agent: s.agent, phase: .waiting, title: title, detail: "\(s.project) · \(s.permission ?? s.activity)", sessionID: s.id), sound: .waiting)
+                    show(Toast(agent: s.agent, phase: .waiting, title: title, detail: "\(s.project) · \(s.permission ?? s.activity)", sessionID: s.id), sound: .waiting, kind: .waiting)
                 }
             } else {
                 waitNotified.remove(id)
@@ -150,11 +154,13 @@ final class SessionStore: ObservableObject {
         case .done where from.isBusy || from == .waiting:
             lastHappy = Date()
             let took = s.turnStart.map { " in " + clock(Date().timeIntervalSince($0)) } ?? ""
-            show(Toast(agent: s.agent, phase: .done, title: "\(s.agent.label) finished\(took)", detail: "\(s.project) · \(s.activity)", sessionID: s.id), sound: .done)
-            addEffect(.luck, seconds: 8)
+            if show(Toast(agent: s.agent, phase: .done, title: "\(s.agent.label) finished\(took)", detail: "\(s.project) · \(s.activity)", sessionID: s.id), sound: .done, kind: .done) {
+                addEffect(.luck, seconds: 8)
+            }
         case .error:
-            show(Toast(agent: s.agent, phase: .error, title: "\(s.agent.label) hit an error", detail: "\(s.project) · \(s.activity)", sessionID: s.id), sound: .error)
-            addEffect(.harming, seconds: 8)
+            if show(Toast(agent: s.agent, phase: .error, title: "\(s.agent.label) hit an error", detail: "\(s.project) · \(s.activity)", sessionID: s.id), sound: .error, kind: .error) {
+                addEffect(.harming, seconds: 8)
+            }
         case .thinking, .working:
             if from == .idle || from == .done { addEffect(.speed, seconds: 2.5) }
         default:
@@ -168,13 +174,17 @@ final class SessionStore: ObservableObject {
         effects.append(PotionEffect(kind: kind, start: now, until: now.addingTimeInterval(seconds)))
     }
 
-    private func show(_ t: Toast, sound: SoundFX.Kind) {
+    /// Raises an alert as the alert settings allow. Returns whether the popup was shown.
+    @discardableResult
+    private func show(_ t: Toast, sound: SoundFX.Kind, kind: AlertKind) -> Bool {
+        if alerts.sound(t.agent, kind) && !alerts.isQuiet(at: Date()) { SoundFX.play(sound, pet: pet) }
+        guard alerts.popup(t.agent, kind) else { return false }
         toast = t
-        SoundFX.play(sound, pet: pet)
         let id = t.id
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             if self?.toast?.id == id { self?.toast = nil }
         }
+        return true
     }
 
     func dismissToast() { toast = nil }
@@ -287,10 +297,10 @@ final class SessionStore: ObservableObject {
                 let key = "\(agent.rawValue)-\(w.label)-\(w.resetsAt?.timeIntervalSince1970 ?? 0)-\(level)"
                 guard !limitAlerts.contains(key) else { continue }
                 limitAlerts.insert(key)
-                show(Toast(agent: agent, phase: level >= 90 ? .error : .waiting,
+                let shown = show(Toast(agent: agent, phase: level >= 90 ? .error : .waiting,
                            title: "\(agent.label) \(w.label.lowercased()) limit at \(Int(pct))%",
-                           detail: untilText(w.resetsAt, now: now), header: level >= 90 ? "Almost out!" : "Running low!"), sound: level >= 90 ? .error : .waiting)
-                addEffect(level >= 90 ? .harming : .glowing, seconds: 6)
+                           detail: untilText(w.resetsAt, now: now), header: level >= 90 ? "Almost out!" : "Running low!"), sound: level >= 90 ? .error : .waiting, kind: .limit)
+                if shown { addEffect(level >= 90 ? .harming : .glowing, seconds: 6) }
             }
         }
     }
@@ -337,19 +347,48 @@ final class SessionStore: ObservableObject {
 
     // MARK: Discovery
 
+    private var claudeRoot: URL {
+        ProcessInfo.processInfo.environment["NOTCHPET_CLAUDE_ROOT"].map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".claude/projects")
+    }
+    private var codexRoot: URL {
+        ProcessInfo.processInfo.environment["NOTCHPET_CODEX_ROOT"].map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".codex/sessions")
+    }
+    private var watcher: FileWatcher?
+    private var changedPaths: Set<String> = []
+
+    private func startWatching() {
+        watcher = FileWatcher(paths: [claudeRoot.resolvingSymlinksInPath().path, codexRoot.resolvingSymlinksInPath().path]) { [weak self] paths in
+            MainActor.assumeIsolated { self?.changedPaths.formUnion(paths.filter { $0.hasSuffix(".jsonl") }) }
+        }
+    }
+
+    /// Only the files FSEvents reported: Claude's `<project>/<session>.jsonl` and Codex rollouts.
+    private func discoverChanged(_ now: Date) {
+        let claude = claudeRoot.resolvingSymlinksInPath().standardizedFileURL
+        let codex = codexRoot.resolvingSymlinksInPath().standardizedFileURL.path
+        var found: [(URL, Agent)] = []
+        for path in changedPaths where tails[path] == nil {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            if url.deletingLastPathComponent().deletingLastPathComponent().path == claude.path {
+                found.append((url, .claude))
+            } else if url.path.hasPrefix(codex + "/") && url.lastPathComponent.hasPrefix("rollout-") {
+                found.append((url, .codex))
+            }
+        }
+        changedPaths.removeAll()
+        track(found, now)
+    }
+
     private func discover(_ now: Date) {
+        changedPaths.removeAll()
         var found: [(URL, Agent)] = []
         let keys: [URLResourceKey] = [.contentModificationDateKey]
-
-        let env = ProcessInfo.processInfo.environment
-        let claudeRoot = env["NOTCHPET_CLAUDE_ROOT"].map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".claude/projects")
         for dir in (try? fm.contentsOfDirectory(at: claudeRoot, includingPropertiesForKeys: nil)) ?? [] {
             for f in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys)) ?? [] where f.pathExtension == "jsonl" {
                 found.append((f, .claude))
             }
         }
 
-        let codexRoot = env["NOTCHPET_CODEX_ROOT"].map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".codex/sessions")
         let cal = Calendar.current
         for back in 0...1 {
             guard let day = cal.date(byAdding: .day, value: -back, to: now) else { continue }
@@ -359,7 +398,10 @@ final class SessionStore: ObservableObject {
                 found.append((f, .codex))
             }
         }
+        track(found, now)
+    }
 
+    private func track(_ found: [(URL, Agent)], _ now: Date) {
         for (url, agent) in found where tails[url.path] == nil {
             guard let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
                   now.timeIntervalSince(mtime) < freshWindow else { continue }

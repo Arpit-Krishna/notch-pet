@@ -18,7 +18,8 @@ final class NotchUI: ObservableObject {
     @Published var pet: PetKind = PetKind(rawValue: UserDefaults.standard.string(forKey: "pet") ?? "") ?? .grassBlock {
         didSet { UserDefaults.standard.set(pet.rawValue, forKey: "pet") }
     }
-    @Published var showPicker = false
+    @Published var showPicker = false { didSet { if showPicker { showSettings = false } } }
+    @Published var showSettings = false { didSet { if showSettings { showPicker = false } } }
     var theme: Theme { pet.theme }
 
     nonisolated static let wing: CGFloat = 44
@@ -34,10 +35,10 @@ final class NotchUI: ObservableObject {
         case .toast:
             return CGSize(width: max(collapsedW, 420), height: notchHeight + 58)
         case .expanded:
-            let rows = showPicker ? max(rows, 3) : rows
+            let rows = showPicker || showSettings ? max(rows, 3) : rows
             let n = max(1, min(rows, NotchUI.maxRows))
             let list = rows == 0 ? 64 : CGFloat(n) * (NotchUI.rowHeight + 6)
-            return CGSize(width: max(collapsedW + 60, 480), height: notchHeight + 66 + (showPicker ? 0 : UsageStrip.height + 6) + list)
+            return CGSize(width: max(collapsedW + 60, 480), height: notchHeight + 66 + (showPicker || showSettings ? 0 : UsageStrip.height + 6) + list)
         }
     }
 }
@@ -144,6 +145,7 @@ struct RootView: View {
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: ui.mode)
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: store.sessions.count)
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: ui.showPicker)
+            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: ui.showSettings)
             Spacer(minLength: 0)
         }
         }
@@ -290,10 +292,13 @@ struct ExpandedView: View {
                     .padding(.horizontal, 14)
                     .frame(height: 22)
 
-                if !ui.showPicker {
+                if !ui.showPicker && !ui.showSettings {
                     UsageStrip(store: store, theme: theme, now: tl.date)
                 }
-                if ui.showPicker {
+                if ui.showSettings {
+                    AlertSettingsView(store: store, theme: theme)
+                    Spacer(minLength: 0)
+                } else if ui.showPicker {
                     PetPicker(ui: ui)
                     Spacer(minLength: 0)
                 } else if store.sessions.isEmpty {
@@ -320,6 +325,7 @@ struct ExpandedView: View {
 
     private func summary(_ now: Date) -> String {
         if ui.showPicker { return "Choose your pet" }
+        if ui.showSettings { return store.alerts.isQuiet(at: Date()) ? "Alert settings · quiet hours now" : "Alert settings" }
         if let err = store.hookError { return "Couldn't change permission alerts: \(err)" }
         let phases = store.sessions.map { $0.displayPhase(at: now) }
         let busy = phases.filter(\.isBusy).count
@@ -361,12 +367,16 @@ struct ExpandedView: View {
             .help("Open Notch Pet at login")
 
             Spacer()
+            Button { ui.showSettings.toggle() } label: {
+                Image(systemName: ui.showSettings ? "checkmark" : (store.alerts.isQuiet(at: Date()) ? "moon.fill" : "gearshape"))
+            }
+            .help("Alert settings: popups and sounds per agent, quiet hours")
             Button { ui.showPicker.toggle() } label: {
                 Label(ui.showPicker ? "Done" : ui.pet.name, systemImage: ui.showPicker ? "checkmark" : "pawprint.fill")
             }
             .help("Choose your pet")
             Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
-                .help("Quit Notch Pet")
+                .help("Quit Notch Pet \(AppInfo.versionText)")
         }
         .buttonStyle(.plain)
         .font(uiFont(11, .regular, theme))

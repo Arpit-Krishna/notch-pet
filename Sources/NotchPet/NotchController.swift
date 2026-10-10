@@ -116,6 +116,7 @@ final class NotchController {
                 if now.timeIntervalSince(hoverOut!) > 0.35 {
                     hovering = false
                     ui.showPicker = false
+                    ui.showSettings = false
                     updateMode()
                 }
             }

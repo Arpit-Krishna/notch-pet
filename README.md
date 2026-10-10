@@ -18,11 +18,20 @@ cd notch-pet
 
 Look at your notch. Hi Pip 👋 To keep it, drag `build/NotchPet.app` into `/Applications` and turn on **Login** in the panel.
 
-Run the tests (52 checks on the log parsers, file tailing and usage resets):
+Run the tests (log parsers, file tailing, usage resets, hooks and alert settings):
 
 ```sh
 ./test.sh
 ```
+
+Make a downloadable build (version from `VERSION`, currently 0.2.0):
+
+```sh
+./release.sh            # dist/NotchPet-<version>.zip and .dmg
+./release.sh --publish  # also creates the GitHub release and uploads both
+```
+
+The builds are signed ad hoc, so colleagues right-click → Open the first time. Set `SIGN_IDENTITY` and `NOTARY_PROFILE` (see the top of `release.sh`) for a signed, notarized build.
 
 Fun extras:
 
@@ -54,6 +63,7 @@ build/NotchPet.app/Contents/MacOS/NotchPet --export-sounds ./sounds    # every p
 |---|---|
 | 🔔 Permission alerts | Pip knows the moment an agent asks for permission (adds a tiny hook, click again to remove). Codex runs it only after you trust it with `/hooks` in Codex; the bell stays amber until then. |
 | 🔗 Connect Claude usage | Shows your Claude 5h and weekly limits, refreshed every 2 minutes. Uses the login saved by the `claude` terminal app (macOS asks once for Keychain access). If that login expires, run `claude` once to renew it. |
+| ⚙️ Alerts | Turn popups and sounds on or off per agent and per alert (finished, needs you, error, plan limit), and set quiet hours when Pip stays silent |
 | 🐾 Pet picker | Choose your pet |
 | 🔊 Mute | Sounds on/off |
 | ⭕ Login | Start Pip at login |

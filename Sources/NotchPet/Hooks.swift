@@ -4,10 +4,11 @@ import Foundation
 /// The hook only appends the event to a file and exits; it prints nothing, so the agent
 /// behaves exactly as if no hook were installed.
 enum HookInstaller {
-    static let home = FileManager.default.homeDirectoryForCurrentUser
-    static let dir = home.appendingPathComponent("Library/Application Support/NotchPet")
-    static let scriptURL = dir.appendingPathComponent("pip-hook.sh")
-    static let eventsURL = dir.appendingPathComponent("events.jsonl")
+    /// Replaceable so tests can install into a scratch home folder.
+    nonisolated(unsafe) static var home = FileManager.default.homeDirectoryForCurrentUser
+    static var dir: URL { home.appendingPathComponent("Library/Application Support/NotchPet") }
+    static var scriptURL: URL { dir.appendingPathComponent("pip-hook.sh") }
+    static var eventsURL: URL { dir.appendingPathComponent("events.jsonl") }
     static let marker = "NotchPet/pip-hook.sh"
 
     struct Target {
@@ -62,9 +63,9 @@ enum HookInstaller {
     /// Claude Code only reports plan limits (5-hour, weekly) to its status line command.
     /// Pip's status line saves that payload and then runs your previous status line, so
     /// what you see in the terminal doesn't change.
-    static let statusScriptURL = dir.appendingPathComponent("pip-statusline.sh")
-    static let statusURL = dir.appendingPathComponent("claude-status.jsonl")
-    static let previousStatusURL = dir.appendingPathComponent("statusline-previous")
+    static var statusScriptURL: URL { dir.appendingPathComponent("pip-statusline.sh") }
+    static var statusURL: URL { dir.appendingPathComponent("claude-status.jsonl") }
+    static var previousStatusURL: URL { dir.appendingPathComponent("statusline-previous") }
     static let statusMarker = "NotchPet/pip-statusline.sh"
 
     static var isStatusLineInstalled: Bool {
